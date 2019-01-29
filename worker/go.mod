@@ -12,4 +12,5 @@ require (
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a // indirect
 	github.com/stretchr/testify v1.3.0 // indirect
+	gopkg.in/Shopify/sarama.v1 v1.20.1
 )

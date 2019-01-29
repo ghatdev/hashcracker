@@ -10,8 +10,8 @@ import (
 	"runtime"
 	"sync"
 
-	"github.com/Shopify/sarama"
 	"github.com/mattheath/base62"
+	sarama "gopkg.in/Shopify/sarama.v1"
 )
 
 type msg struct {
