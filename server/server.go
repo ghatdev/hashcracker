@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"encoding/json"
@@ -16,24 +16,23 @@ type msg struct {
 	End    int64
 }
 
-func main() {
+func RunCrack(hash, salt string, l int, kafkaServer []string) error {
 	config := sarama.NewConfig()
 	config.Producer.Partitioner = sarama.NewRandomPartitioner
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	config.Producer.Return.Successes = true
 
-	c, err := sarama.NewSyncProducer([]string{
-		"localhost:9092",
-	}, config)
+	c, err := sarama.NewSyncProducer(kafkaServer, config)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	defer c.Close()
 
-	target := strings.ToLower("6B58896A74C09A95D1D56FE51BD90D0AAB6187258D6BC446DC989947E7426811")
-	salt := ""
-	l := 5
+	target := strings.ToLower(hash)
+	if l == 0 {
+		l = 5
+	}
 
 	total := int64(math.Pow(62, float64(l)))
 
@@ -65,4 +64,8 @@ func main() {
 
 		log.Printf("Partition: %v, Offset: %v\nHash: %v\nRange: %v~%v\nSalt:%v\n", p, offset, target, m.Start, m.End, salt)
 	}
+
+	// TODO: we need to wait and listen the complete message.
+
+	return nil
 }

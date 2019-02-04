@@ -8,8 +8,8 @@ import (
 	"log"
 	"runtime"
 
-	sarama "gopkg.in/Shopify/sarama.v1"
 	"github.com/mattheath/base62"
+	sarama "gopkg.in/Shopify/sarama.v1"
 )
 
 type msg struct {
@@ -27,10 +27,10 @@ type worker struct {
 var workerPool []worker
 
 func (w *worker) Work() {
-	var m msg
+	var m *msg
 	for {
 		m = <-w.m
-		WorkLoop:
+	WorkLoop:
 		for n := m.Start; n < m.End; n++ {
 			select {
 			case t := <-w.found: // when cancel message received
@@ -38,7 +38,7 @@ func (w *worker) Work() {
 					break WorkLoop
 				}
 			default: // or work
-				if target == gemerateHashString(salt, n) {
+				if m.Target == gemerateHashString(m.Salt, n) {
 					// now just stop
 					fmt.Printf("Found hash! - %v\n", base62.EncodeInt64(n))
 					cancelWorks(m.Target)
@@ -57,7 +57,7 @@ func (w *worker) GetTarget(m *msg) {
 }
 
 func cancelWorks(target string) {
-	for _, w := workerPool {
+	for _, w := range workerPool {
 		w.CancelWorking(target)
 	}
 }
@@ -65,14 +65,11 @@ func cancelWorks(target string) {
 func createPool() {
 	nCore := runtime.NumCPU()
 
-	foundPipe := make(chan string, nCore)
-	msgPipe := make(chan msg, nCore)
-
 	workerPool = make([]worker, nCore)
 
 	for i := 0; i < nCore; i++ {
-		workerPool = append(pool, worker{found: foundPipe, m: msgPipe})
-		pool[i].Work()
+		workerPool = append(workerPool, worker{found: make(chan string), m: make(chan *msg)})
+		workerPool[i].Work()
 	}
 }
 
@@ -109,6 +106,8 @@ func Work(kafkaServer []string, topic string) error {
 			broadcastMsg(m.Target, m.Salt, m.Start, m.End)
 		}
 	}
+
+	return nil
 }
 
 func broadcastMsg(target, salt string, start, end int64) {
@@ -116,10 +115,10 @@ func broadcastMsg(target, salt string, start, end int64) {
 
 	for i, w := range workerPool {
 		w.GetTarget(&msg{
-			Target:target,
-			Salt: salt,
-			Start: start * int64(i) / int64(nCore),
-			End: end*int64(i+1)/int64(nCore),
+			Target: target,
+			Salt:   salt,
+			Start:  start * int64(i) / int64(nCore),
+			End:    end * int64(i+1) / int64(nCore),
 		})
 	}
 }
