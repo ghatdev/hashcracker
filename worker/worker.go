@@ -8,7 +8,7 @@ import (
 	"log"
 	"runtime"
 
-	"github.com/Shopify/sarama"
+	sarama "gopkg.in/Shopify/sarama.v1"
 	"github.com/mattheath/base62"
 )
 
