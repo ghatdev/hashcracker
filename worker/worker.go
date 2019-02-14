@@ -32,6 +32,8 @@ var workerPool []worker
 func (w *worker) Work() {
 	for {
 		m := <-w.m
+		var n int64
+
 	WorkLoop:
 		for n := m.Start; n < m.End; n++ {
 			select {
@@ -47,7 +49,10 @@ func (w *worker) Work() {
 				}
 			}
 		}
-		m.wg.Done()
+
+		if n >= m.End {
+			m.wg.Done()
+		}
 	}
 }
 
