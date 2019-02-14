@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"sync"
+	"time"
 
 	"github.com/mattheath/base62"
 	sarama "gopkg.in/Shopify/sarama.v1"
@@ -17,6 +19,7 @@ type msg struct {
 	Salt   string
 	Start  int64
 	End    int64
+	wg     *sync.WaitGroup
 }
 
 type worker struct {
@@ -27,24 +30,24 @@ type worker struct {
 var workerPool []worker
 
 func (w *worker) Work() {
-	var m *msg
 	for {
-		m = <-w.m
+		m := <-w.m
 	WorkLoop:
 		for n := m.Start; n < m.End; n++ {
 			select {
 			case t := <-w.found: // when cancel message received
 				if t == m.Target {
+					m.wg.Done()
 					break WorkLoop
 				}
 			default: // or work
-				if m.Target == gemerateHashString(m.Salt, n) {
-					// now just stop
+				if m.Target == generateHashString(m.Salt, n) {
 					fmt.Printf("Found hash! - %v\n", base62.EncodeInt64(n))
 					cancelWorks(m.Target)
 				}
 			}
 		}
+		m.wg.Done()
 	}
 }
 
@@ -65,11 +68,10 @@ func cancelWorks(target string) {
 func createPool() {
 	nCore := runtime.NumCPU()
 
-	workerPool = make([]worker, nCore)
-
 	for i := 0; i < nCore; i++ {
-		workerPool = append(workerPool, worker{found: make(chan string), m: make(chan *msg)})
-		workerPool[i].Work()
+		w := worker{found: make(chan string, 1), m: make(chan *msg, 1)}
+		workerPool = append(workerPool, w)
+		go workerPool[i].Work()
 	}
 }
 
@@ -103,27 +105,37 @@ func Work(kafkaServer []string, topic string) error {
 			}
 
 			log.Printf("\nTarget received: %v\nRange: %v~%v\nSalt: %v\n", m.Target, m.Start, m.End, m.Salt)
-			broadcastMsg(m.Target, m.Salt, m.Start, m.End)
+			t := crackTarget(m.Target, m.Salt, m.Start, m.End)
+			log.Printf("\nTarget cracked - elapsed time: %v\n", t)
 		}
 	}
 
 	return nil
 }
 
-func broadcastMsg(target, salt string, start, end int64) {
+func crackTarget(target, salt string, start, end int64) time.Duration {
 	nCore := runtime.NumCPU()
+	startTime := time.Now()
+
+	wg := sync.WaitGroup{}
 
 	for i, w := range workerPool {
+		wg.Add(1)
 		w.GetTarget(&msg{
 			Target: target,
 			Salt:   salt,
 			Start:  start * int64(i) / int64(nCore),
 			End:    end * int64(i+1) / int64(nCore),
+			wg:     &wg,
 		})
 	}
+
+	wg.Wait()
+
+	return time.Since(startTime)
 }
 
-func gemerateHashString(salt string, n int64) string {
+func generateHashString(salt string, n int64) string {
 	str := salt + base62.EncodeInt64(n)
 
 	hash := sha256.Sum256([]byte(str))
